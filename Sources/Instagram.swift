@@ -144,7 +144,7 @@ public class Instagram {
         var urlRequest = URLRequest(url: buildURL(for: endpoint, withParameters: parameters))
         urlRequest.httpMethod = method.rawValue
 
-        urlSession.dataTask(with: urlRequest) { (data, _, error) in
+        urlSession.dataTask(with: urlRequest) { data, _, error in
             if let data = data {
                 DispatchQueue.global(qos: .utility).async {
                     do {
@@ -154,9 +154,45 @@ public class Instagram {
                                 failure?(InstagramError(kind: .invalidRequest, message: errorMessage))
                             }
                         } else {
-                            DispatchQueue.main.async {
-                                success?(object.data!)
+                            if let nextURL = object.pagination?.nextURL {
+                                self.requestNextURL(nextURL, prevData: object.data!, success: success, failure: failure)
+                            } else {
+                                DispatchQueue.main.async {
+                                    success?(object.data!)
+                                }
                             }
+                        }
+                    } catch {
+                        DispatchQueue.main.async {
+                            failure?(InstagramError(kind: .jsonParseError, message: error.localizedDescription))
+                        }
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    private func requestNextURL<T: Decodable>(_ url: String, prevData: T, success: SuccessHandler<T>?, failure: FailureHandler?) {
+        urlSession.dataTask(with: URL(string: url)!) { data, _, error in
+            if let data = data {
+                DispatchQueue.global(qos: .utility).async {
+                    do {
+                        let object = try JSONDecoder().decode(InstagramResponse<T>.self, from: data)
+                        if let errorMessage = object.meta.errorMessage {
+                            DispatchQueue.main.async {
+                                failure?(InstagramError(kind: .invalidRequest, message: errorMessage))
+                            }
+                        } else {
+                            // swiftlint:disable force_cast
+                            let allData = ((prevData as! NSArray) as Array) + ((object.data as! NSArray) as Array)
+                            if let nextURL = object.pagination?.nextURL {
+                                self.requestNextURL(nextURL, prevData: allData as! T, success: success, failure: failure)
+                            } else {
+                                DispatchQueue.main.async {
+                                    success?(allData as! T)
+                                }
+                            }
+                            // swiftlint:enable force_cast
                         }
                     } catch {
                         DispatchQueue.main.async {
