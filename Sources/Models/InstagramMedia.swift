@@ -76,6 +76,9 @@ public struct InstagramMedia: Decodable {
     /// A struct containing the resolution of a video or image.
     public struct Resolution: Decodable {
 
+        /// The resolution identifier.
+        public let id: String
+        
         /// The width of the media.
         public let width: Int
 
